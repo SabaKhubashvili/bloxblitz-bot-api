@@ -1,6 +1,6 @@
 import { Injectable, OnModuleDestroy, OnModuleInit, Logger } from '@nestjs/common';
-
 import { PrismaPg } from '@prisma/adapter-pg';
+import { Pool } from 'pg';
 import { makeRetryExtension } from './extensions/retryPrisma.extension';
 import { PrismaClient } from '@prisma/client';
 
@@ -9,14 +9,18 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   private readonly logger = new Logger(PrismaService.name);
 
   constructor() {
-    const adapter = new PrismaPg({
+    // Create a pg Pool instance
+    const pool = new Pool({
       connectionString: process.env.DATABASE_URL!,
-      connect_timeout: 5000,
+      connectionTimeoutMillis: 5000,
+
     });
+
+    // Create the adapter with the pool
+    const adapter = new PrismaPg(pool);
 
     super({
       adapter,
-
       log: ['query', 'error', 'warn']
     });
   }
@@ -43,7 +47,9 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
         return;
       } catch (err: any) {
         this.logger.error(`❌ DB connection failed (attempt ${attempt}/${maxRetries}): ${err.message}`);
+        
         if (attempt >= maxRetries) throw err;
+
         const delay = baseDelay * attempt;
         this.logger.warn(`⏳ Retrying in ${delay}ms...`);
         await new Promise((res) => setTimeout(res, delay));
@@ -55,6 +61,7 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async safeQuery<T>(callback: () => Promise<T>): Promise<T> {
     let attempt = 0;
     const maxRetries = 3;
+
     while (true) {
       try {
         return await callback();
