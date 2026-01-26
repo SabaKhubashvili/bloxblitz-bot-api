@@ -1,0 +1,558 @@
+generator client {
+  provider = "prisma-client-js"
+    output   = "../node_modules/.prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+model AmpGiveaway {
+  id               Int                @id @default(autoincrement())
+  minWager         Int                @default(0)
+  endDate          DateTime
+  winnerUsername   String?
+  isActive         Boolean            @default(true)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @default(now())
+  petId            Int
+  Variant          Variant[]
+  value            Int
+  pets             pets               @relation(fields: [petId], references: [id])
+  User             User?              @relation(fields: [winnerUsername], references: [username])
+  AmpGiveawayEntry AmpGiveawayEntry[]
+
+  @@index([endDate])
+  @@index([endDate, isActive])
+  @@index([id])
+}
+
+model AmpGiveawayEntry {
+  id           Int         @id @default(autoincrement())
+  giveawayId   Int
+  userUsername String
+  created_at   DateTime    @default(now())
+  AmpGiveaway  AmpGiveaway @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  User         User        @relation(fields: [userUsername], references: [username], onDelete: Cascade)
+
+  @@index([giveawayId])
+  @@index([userUsername])
+}
+
+model Bot {
+  id                  Int             @id @default(autoincrement())
+  name                String
+  rblx_id             String          @unique
+  private_server_link String
+  profile_picture     String
+  banned              Boolean         @default(false)
+  active              Boolean
+  created_at          DateTime        @default(now())
+  updated_at          DateTime        @default(now())
+  can_join            Boolean         @default(true)
+  UserInventory       UserInventory[]
+
+  @@index([active])
+  @@index([name])
+  @@index([rblx_id])
+}
+
+model CoinflipGameHistory {
+  id                                             Int                          @id @default(autoincrement())
+  gameId                                         String                       @unique
+  betAmount                                      Float
+  player1Username                                String
+  player2Username                                String
+  winnerSide                                     Side
+  player1Side                                    Side
+  createdAt                                      DateTime                     @default(now())
+  updatedAt                                      DateTime
+  player1Items                                   Json
+  player2Items                                   Json
+  User_CoinflipGameHistory_player1UsernameToUser User                         @relation("CoinflipGameHistory_player1UsernameToUser", fields: [player1Username], references: [username])
+  User_CoinflipGameHistory_player2UsernameToUser User                         @relation("CoinflipGameHistory_player2UsernameToUser", fields: [player2Username], references: [username])
+  CoinflipGameProvablyFairity                    CoinflipGameProvablyFairity?
+
+  @@index([player1Username])
+  @@index([player2Username])
+}
+
+model CoinflipGameProvablyFairity {
+  id                  Int                 @id @default(autoincrement())
+  gameId              String              @unique
+  serverSeed          String
+  serverSeedHash      String
+  clientSeed          String
+  nonce               String
+  result              String
+  createdAt           DateTime            @default(now())
+  player1Chance       String              @default("0.50")
+  player2Chance       String              @default("0.50")
+  CoinflipGameHistory CoinflipGameHistory @relation(fields: [gameId], references: [gameId])
+
+  @@index([gameId])
+}
+
+model KinguinCodeBatch {
+  id            String   @id
+  batchName     String
+  purchaseDate  DateTime
+  totalCodes    Int
+  totalValue    Decimal  @db.Decimal(10, 2)
+  codesRedeemed Int      @default(0)
+  notes         String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime
+
+  @@index([batchName])
+  @@index([purchaseDate])
+}
+
+model KinguinPromoCode {
+  id                   String                @id
+  code                 String                @unique
+  value                Decimal               @db.Decimal(10, 2)
+  isRedeemed           Boolean               @default(false)
+  redeemedBy           String?
+  redeemedAt           DateTime?
+  expiresAt            DateTime?
+  batchId              String?
+  createdAt            DateTime              @default(now())
+  updatedAt            DateTime
+  User                 User?                 @relation(fields: [redeemedBy], references: [username])
+  KinguinRedemptionLog KinguinRedemptionLog?
+
+  @@index([batchId])
+  @@index([code])
+  @@index([isRedeemed])
+  @@index([redeemedBy])
+}
+
+model KinguinRedemptionLog {
+  id               String           @id
+  codeId           String           @unique
+  userUsername     String
+  ipAddress        String?
+  userAgent        String?
+  creditsBefore    Decimal          @db.Decimal(10, 2)
+  creditsAfter     Decimal          @db.Decimal(10, 2)
+  creditAmount     Decimal          @db.Decimal(10, 2)
+  redeemedAt       DateTime         @default(now())
+  KinguinPromoCode KinguinPromoCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  User             User             @relation(fields: [userUsername], references: [username], onDelete: Cascade)
+
+  @@index([redeemedAt])
+  @@index([userUsername])
+}
+
+model Mm2Bot {
+  id                  Int                @id @default(autoincrement())
+  name                String
+  rblx_id             String             @unique
+  private_server_link String
+  profile_picture     String
+  banned              Boolean            @default(false)
+  active              Boolean
+  created_at          DateTime           @default(now())
+  updated_at          DateTime           @default(now())
+  can_join            Boolean            @default(true)
+  UserInventoryMm2    UserInventoryMm2[]
+
+  @@index([active])
+  @@index([name])
+  @@index([rblx_id])
+}
+
+model Mm2CoinflipGameHistory {
+  id                                                Int                             @id @default(autoincrement())
+  gameId                                            String                          @unique
+  betAmount                                         Float
+  player1Username                                   String
+  player2Username                                   String
+  winnerSide                                        Side
+  player1Side                                       Side
+  createdAt                                         DateTime                        @default(now())
+  updatedAt                                         DateTime
+  player1Items                                      Json
+  player2Items                                      Json
+  User_Mm2CoinflipGameHistory_player1UsernameToUser User                            @relation("Mm2CoinflipGameHistory_player1UsernameToUser", fields: [player1Username], references: [username])
+  User_Mm2CoinflipGameHistory_player2UsernameToUser User                            @relation("Mm2CoinflipGameHistory_player2UsernameToUser", fields: [player2Username], references: [username])
+  Mm2CoinflipGameProvablyFairity                    Mm2CoinflipGameProvablyFairity?
+
+  @@index([player1Username])
+  @@index([player2Username])
+}
+
+model Mm2CoinflipGameProvablyFairity {
+  id                     Int                    @id @default(autoincrement())
+  gameId                 String                 @unique
+  serverSeed             String
+  serverSeedHash         String
+  clientSeed             String
+  nonce                  String
+  result                 String
+  createdAt              DateTime               @default(now())
+  player1Chance          String                 @default("0.50")
+  player2Chance          String                 @default("0.50")
+  Mm2CoinflipGameHistory Mm2CoinflipGameHistory @relation(fields: [gameId], references: [gameId])
+
+  @@index([gameId])
+}
+
+model Mm2Giveaway {
+  id               Int                @id @default(autoincrement())
+  minWager         Int                @default(0)
+  endDate          DateTime
+  itemId           Int
+  value            Int
+  winnerUsername   String?
+  isActive         Boolean            @default(true)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime           @default(now())
+  Mm2Item          Mm2Item            @relation(fields: [itemId], references: [id])
+  User             User?              @relation(fields: [winnerUsername], references: [username])
+  Mm2GiveawayEntry Mm2GiveawayEntry[]
+
+  @@index([endDate])
+  @@index([endDate, isActive])
+  @@index([id])
+}
+
+model Mm2GiveawayEntry {
+  id           Int         @id @default(autoincrement())
+  giveawayId   Int
+  userUsername String
+  created_at   DateTime    @default(now())
+  Mm2Giveaway  Mm2Giveaway @relation(fields: [giveawayId], references: [id], onDelete: Cascade)
+  User         User        @relation(fields: [userUsername], references: [username], onDelete: Cascade)
+
+  @@index([giveawayId])
+  @@index([userUsername])
+}
+
+model Mm2Item {
+  id               Int                @id @default(autoincrement())
+  name             String
+  image            String
+  category         String             @default("")
+  rarity           String
+  inGameName       String
+  value            Decimal            @db.Decimal(10, 2)
+  created_at       DateTime           @default(now())
+  updated_at       DateTime
+  itemId           String             @unique
+  Mm2Giveaway      Mm2Giveaway[]
+  UserInventoryMm2 UserInventoryMm2[]
+
+  @@index([inGameName])
+  @@index([name])
+  @@index([rarity])
+}
+
+model Referral {
+  id                               String        @id
+  userUsername                     String        @unique
+  referralCode                     String        @unique
+  isActive                         Boolean       @default(true)
+  createdAt                        DateTime      @default(now())
+  updatedAt                        DateTime
+  lastActivity                     DateTime?
+  lastClaim                        DateTime?
+  totalGenerated                   Decimal       @default(0) @db.Decimal(10, 2)
+  totalClaimed                     Decimal       @default(0) @db.Decimal(10, 2)
+  claimableAmount                  Decimal       @default(0) @db.Decimal(10, 2)
+  pendingAmount                    Decimal       @default(0) @db.Decimal(10, 2)
+  monthlyLimit                     Decimal?      @db.Decimal(10, 2)
+  lifetimeLimit                    Decimal?      @default(5000.00) @db.Decimal(10, 2)
+  minimumClaim                     Decimal       @default(10.00) @db.Decimal(10, 2)
+  commissionRate                   Decimal       @default(0.02) @db.Decimal(5, 4)
+  bonusMultiplier                  Decimal       @default(1.0) @db.Decimal(3, 2)
+  tier                             Int           @default(1)
+  clickCount                       Int           @default(0)
+  conversionCount                  Int           @default(0)
+  conversionRate                   Decimal       @default(0) @db.Decimal(5, 4)
+  lastReferralCodeChange           DateTime?
+  User_Referral_userUsernameToUser User          @relation("Referral_userUsernameToUser", fields: [userUsername], references: [username], onDelete: Cascade)
+  ReferralLog                      ReferralLog[]
+  User_User_referedByToReferral    User[]        @relation("User_referedByToReferral")
+
+  @@index([referralCode])
+  @@index([userUsername])
+}
+
+model ReferralLog {
+  id               String   @id
+  referredUsername String
+  game             String
+  amount           Decimal  @default(0) @db.Decimal(10, 2)
+  referrerCode     String
+  createdAt        DateTime @default(now())
+  referralMm2Id    String?
+  User             User     @relation(fields: [referredUsername], references: [username], onDelete: Cascade)
+  Referral         Referral @relation(fields: [referrerCode], references: [referralCode], onDelete: Cascade)
+
+  @@index([referrerCode])
+}
+
+model ReferralLogMm2 {
+  id               String      @id
+  referredUsername String
+  game             String
+  amount           Decimal     @default(0) @db.Decimal(10, 2)
+  referrerCode     String
+  createdAt        DateTime    @default(now())
+  User             User        @relation(fields: [referredUsername], references: [username], onDelete: Cascade)
+  ReferralMm2      ReferralMm2 @relation(fields: [referrerCode], references: [referralCode], onDelete: Cascade)
+
+  @@index([referrerCode])
+}
+
+model ReferralMm2 {
+  id                                  String           @id
+  userUsername                        String           @unique
+  referralCode                        String           @unique
+  isActive                            Boolean          @default(true)
+  createdAt                           DateTime         @default(now())
+  updatedAt                           DateTime
+  lastActivity                        DateTime?
+  lastClaim                           DateTime?
+  totalGenerated                      Decimal          @default(0) @db.Decimal(10, 2)
+  totalClaimed                        Decimal          @default(0) @db.Decimal(10, 2)
+  claimableAmount                     Decimal          @default(0) @db.Decimal(10, 2)
+  pendingAmount                       Decimal          @default(0) @db.Decimal(10, 2)
+  monthlyLimit                        Decimal?         @db.Decimal(10, 2)
+  lifetimeLimit                       Decimal?         @default(5000.00) @db.Decimal(10, 2)
+  minimumClaim                        Decimal          @default(10.00) @db.Decimal(10, 2)
+  commissionRate                      Decimal          @default(0.02) @db.Decimal(5, 4)
+  bonusMultiplier                     Decimal          @default(1.0) @db.Decimal(3, 2)
+  tier                                Int              @default(1)
+  clickCount                          Int              @default(0)
+  conversionCount                     Int              @default(0)
+  conversionRate                      Decimal          @default(0) @db.Decimal(5, 4)
+  lastReferralCodeChange              DateTime?
+  ReferralLogMm2                      ReferralLogMm2[]
+  User_ReferralMm2_userUsernameToUser User             @relation("ReferralMm2_userUsernameToUser", fields: [userUsername], references: [username], onDelete: Cascade)
+  User_User_referedByMm2ToReferralMm2 User[]           @relation("User_referedByMm2ToReferralMm2")
+
+  @@index([referralCode])
+  @@index([userUsername])
+}
+
+model User {
+  id                                                                  String                   @id
+  username                                                            String                   @unique
+  rblx_id                                                             String                   @unique
+  profile_picture                                                     String
+  userStatisticsId                                                    Int?                     @unique
+  created_at                                                          DateTime                 @default(now())
+  updated_at                                                          DateTime
+  role                                                                UserRoles                @default(MEMBER)
+  client_seed                                                         String
+  last_login_ip                                                       String?
+  referedBy                                                           String?
+  referralLastUpdate                                                  DateTime?
+  referedByMm2                                                        String?
+  AmpGiveaway                                                         AmpGiveaway[]
+  AmpGiveawayEntry                                                    AmpGiveawayEntry[]
+  CoinflipGameHistory_CoinflipGameHistory_player1UsernameToUser       CoinflipGameHistory[]    @relation("CoinflipGameHistory_player1UsernameToUser")
+  CoinflipGameHistory_CoinflipGameHistory_player2UsernameToUser       CoinflipGameHistory[]    @relation("CoinflipGameHistory_player2UsernameToUser")
+  KinguinPromoCode                                                    KinguinPromoCode[]
+  KinguinRedemptionLog                                                KinguinRedemptionLog[]
+  Mm2CoinflipGameHistory_Mm2CoinflipGameHistory_player1UsernameToUser Mm2CoinflipGameHistory[] @relation("Mm2CoinflipGameHistory_player1UsernameToUser")
+  Mm2CoinflipGameHistory_Mm2CoinflipGameHistory_player2UsernameToUser Mm2CoinflipGameHistory[] @relation("Mm2CoinflipGameHistory_player2UsernameToUser")
+  Mm2Giveaway                                                         Mm2Giveaway[]
+  Mm2GiveawayEntry                                                    Mm2GiveawayEntry[]
+  Referral_Referral_userUsernameToUser                                Referral?                @relation("Referral_userUsernameToUser")
+  ReferralLog                                                         ReferralLog[]
+  ReferralLogMm2                                                      ReferralLogMm2[]
+  ReferralMm2_ReferralMm2_userUsernameToUser                          ReferralMm2?             @relation("ReferralMm2_userUsernameToUser")
+  ReferralMm2_User_referedByMm2ToReferralMm2                          ReferralMm2?             @relation("User_referedByMm2ToReferralMm2", fields: [referedByMm2], references: [referralCode])
+  Referral_User_referedByToReferral                                   Referral?                @relation("User_referedByToReferral", fields: [referedBy], references: [referralCode])
+  UserInventory                                                       UserInventory[]
+  UserInventoryMm2                                                    UserInventoryMm2[]
+  UserStatistics                                                      UserStatistics?
+  UserVerification                                                    UserVerification[]
+  tip_transactions_tip_transactions_recipientUsernameToUser           tip_transactions[]       @relation("tip_transactions_recipientUsernameToUser")
+  tip_transactions_tip_transactions_senderUsernameToUser              tip_transactions[]       @relation("tip_transactions_senderUsernameToUser")
+
+  @@index([username, rblx_id])
+}
+
+model UserInventory {
+  id             Int                    @id @default(autoincrement())
+  userUsername   String
+  petId          Int
+  petInGameId    String
+  value          Float
+  petVariant     Variant[]
+  state          UserInventoryItemState
+  owner_bot_id   Int
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime
+  botTradeStatus BotTradeStatus
+  Bot            Bot                    @relation(fields: [owner_bot_id], references: [id], onDelete: Cascade)
+  pets           pets                   @relation(fields: [petId], references: [id])
+  User           User                   @relation(fields: [userUsername], references: [username], onDelete: Cascade)
+
+  @@index([id, userUsername])
+  @@index([owner_bot_id])
+  @@index([petId])
+  @@index([state])
+  @@index([userUsername, id])
+  @@index([userUsername])
+}
+
+model UserInventoryMm2 {
+  id             Int                    @id @default(autoincrement())
+  userUsername   String
+  itemId         Int
+  value          Decimal                @db.Decimal(10, 2)
+  state          UserInventoryItemState
+  owner_bot_id   Int
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime
+  botTradeStatus BotTradeStatus
+  Mm2Item        Mm2Item                @relation(fields: [itemId], references: [id])
+  Mm2Bot         Mm2Bot                 @relation(fields: [owner_bot_id], references: [id], onDelete: Cascade)
+  User           User                   @relation(fields: [userUsername], references: [username], onDelete: Cascade)
+
+  @@index([itemId])
+  @@index([owner_bot_id])
+  @@index([state])
+  @@index([userUsername])
+  @@index([userUsername, state])
+}
+
+model UserStatistics {
+  id              Int      @id @default(autoincrement())
+  userUsername    String   @unique
+  totalWagered    Float    @default(0.00)
+  coinflipsWon    Int      @default(0)
+  biggestWin      Int      @default(0)
+  created_at      DateTime @default(now())
+  updated_at      DateTime
+  totalWageredMm2 Float    @default(0.00)
+  User            User     @relation(fields: [userUsername], references: [username])
+
+  @@index([totalWageredMm2(sort: Desc)])
+  @@index([totalWagered(sort: Desc)])
+  @@index([userUsername])
+}
+
+model UserVerification {
+  id           Int      @id @default(autoincrement())
+  userUsername String
+  description  String
+  key          String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime
+  User         User     @relation(fields: [userUsername], references: [username], onDelete: Cascade)
+
+  @@index([key])
+  @@index([userUsername])
+}
+
+model ipBans {
+  id           Int       @id @default(autoincrement())
+  ip_address   String
+  banned_until DateTime?
+  reason       String
+  created_at   DateTime  @default(now())
+
+  @@index([ip_address])
+}
+
+model pets {
+  id                Int             @id @default(autoincrement())
+  name              String
+  image             String
+  rarity            String
+  type              String
+  inGameName        String?
+  rvalue            Float
+  nvalue            Float
+  mvalue            Float
+  rvalue_nopotion   Float
+  rvalue_ride       Float
+  rvalue_fly        Float
+  rvalue_flyride    Float
+  nvalue_nopotion   Float
+  nvalue_ride       Float
+  nvalue_fly        Float
+  nvalue_flyride    Float
+  mvalue_nopotion   Float
+  mvalue_ride       Float
+  mvalue_fly        Float
+  mvalue_flyride    Float
+  category_d        String
+  category_n        String
+  category_m        String
+  category_preppy_d Boolean         @default(false)
+  category_preppy_n Boolean         @default(false)
+  category_preppy_m Boolean         @default(false)
+  is_flyride        Boolean         @default(false)
+  score             Int             @default(0)
+  created_at        DateTime        @default(now())
+  updated_at        DateTime
+  AmpGiveaway       AmpGiveaway[]
+  UserInventory     UserInventory[]
+
+  @@index([name])
+  @@index([rarity])
+  @@index([score(sort: Desc)])
+  @@index([type])
+}
+
+model tip_transactions {
+  id                                            String   @id
+  senderUsername                                String
+  recipientUsername                             String
+  itemIds                                       String[]
+  totalValue                                    Decimal  @db.Decimal(10, 2)
+  itemCount                                     Int
+  createdAt                                     DateTime @default(now())
+  updatedAt                                     DateTime
+  User_tip_transactions_recipientUsernameToUser User     @relation("tip_transactions_recipientUsernameToUser", fields: [recipientUsername], references: [username])
+  User_tip_transactions_senderUsernameToUser    User     @relation("tip_transactions_senderUsernameToUser", fields: [senderUsername], references: [username])
+}
+
+enum BotTradeStatus {
+  NONE
+  WITHDRAW_ACCEPTED
+}
+
+enum ReferralClaimLogStatus {
+  SUCCESS
+  PENDING
+  FAILED
+  CANCELED
+}
+
+enum Side {
+  H
+  T
+}
+
+enum UserInventoryItemState {
+  WITHDRAWING
+  IDLE
+  BATTLING
+  LOCKED
+}
+
+enum UserRoles {
+  ADMIN
+  MODERATOR
+  SUPPORT
+  MEMBER
+  OWNER
+  COMMUNITY_MANAGER
+  WHALE
+  BIGFLIPPER
+}
+
+enum Variant {
+  M
+  N
+  F
+  R
+}
