@@ -45,25 +45,25 @@ export class BotController {
   private generateExpectedApiKey(timeWindow: number, botId: number): string {
     const keyBase = `${timeWindow}_${this.SHARED_SECRET}_${botId}`;
     const hash = this.simpleHash(keyBase);
-    const currentTimeSec = Math.floor(Date.now() / 1000);
-    const entropy = this.simpleHash(hash + currentTimeSec.toString());
 
-    const finalKey = (hash + entropy).substring(0, 32);
-    return finalKey;
+    // Use current timestamp like Lua client
+    const currentTime = Math.floor(Date.now() / 1000);
+    const entropy = this.simpleHash(hash + currentTime.toString());
+
+    return (hash + entropy).substring(0, 32);
   }
+
 
   private validateDynamicApiKey(providedKey: string, botId: number): boolean {
     const currentTime = Math.floor(Date.now() / 1000);
     const currentWindow = Math.floor(currentTime / this.TIME_WINDOW_SECONDS);
-    const windowsToCheck = [currentWindow, currentWindow - 1];
 
-    for (const window of windowsToCheck) {
-      const expectedKey = this.generateExpectedApiKey(window, botId);
-      if (this.constantTimeCompare(providedKey, expectedKey)) {
-        this.logger.log(`API key validated for bot ${botId} in window ${window}`);
-        return true;
-      }
-    }
+  const windowsToCheck = [currentWindow, currentWindow - 1];
+for (const window of windowsToCheck) {
+  const expectedKey = this.generateExpectedApiKey(window, botId);
+  this.logger.log(`Expected key for window ${window}: ${expectedKey}`);
+}
+this.logger.log(`Client sent key: ${providedKey}`);
 
     this.logger.warn(`Failed API key validation for bot ${botId}`);
     return false;
