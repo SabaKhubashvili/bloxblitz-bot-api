@@ -45,8 +45,9 @@ export class BotController {
   private generateExpectedApiKey(timeWindow: number, botId: number): string {
     const keyBase = `${timeWindow}_${this.SHARED_SECRET}_${botId}`;
     const hash = this.simpleHash(keyBase);
-    const currentTime = timeWindow * this.TIME_WINDOW_SECONDS;
-    const entropy = this.simpleHash(hash + currentTime.toString());
+    const currentTimeSec = Math.floor(Date.now() / 1000);
+    const entropy = this.simpleHash(hash + currentTimeSec.toString());
+
     const finalKey = (hash + entropy).substring(0, 32);
     return finalKey;
   }
