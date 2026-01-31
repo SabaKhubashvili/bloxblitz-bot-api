@@ -28,9 +28,71 @@ export class BotController {
     { count: number; blockedUntil: Date | null }
   > = new Map();
 
+  // Shared secret for API key generation (must match Lua client)
+  private readonly SHARED_SECRET = 'uhsdiahdsajou8d9say7haisdjusai';
+  private readonly TIME_WINDOW_SECONDS = 300; // 5 minutes
+
   constructor(private readonly botService: BotService) {}
 
-  // XOR decryption helper (simpler alternative)
+  // Simple hash matching Lua implementation
+  private simpleHash(str: string): string {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      const byte = str.charCodeAt(i);
+      hash = (hash * 31 + byte) >>> 0; // Use >>> 0 to keep as 32-bit unsigned
+      hash = hash % 4294967296;
+    }
+    return hash.toString(16).padStart(8, '0');
+  }
+
+  // Generate expected API key for a given time window
+  private generateExpectedApiKey(timeWindow: number, botId: number): string {
+    const keyBase = `${timeWindow}_${this.SHARED_SECRET}_${botId}`;
+    const hash = this.simpleHash(keyBase);
+    
+    // Get current timestamp for entropy (within same time window)
+    const currentTime = timeWindow * this.TIME_WINDOW_SECONDS;
+    const entropy = this.simpleHash(hash + currentTime.toString());
+    
+    const finalKey = (hash + entropy).substring(0, 32);
+    return finalKey;
+  }
+
+  // Validate API key with time window tolerance
+  private validateDynamicApiKey(providedKey: string, botId: number): boolean {
+    const currentTime = Math.floor(Date.now() / 1000);
+    const currentWindow = Math.floor(currentTime / this.TIME_WINDOW_SECONDS);
+    
+    // Check current window and previous window (to handle clock skew and transitions)
+    const windowsToCheck = [currentWindow, currentWindow - 1];
+    
+    for (const window of windowsToCheck) {
+      const expectedKey = this.generateExpectedApiKey(window, botId);
+      
+      // Constant-time comparison to prevent timing attacks
+      if (this.constantTimeCompare(providedKey, expectedKey)) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  // Constant-time string comparison
+  private constantTimeCompare(a: string, b: string): boolean {
+    if (a.length !== b.length) {
+      return false;
+    }
+    
+    let result = 0;
+    for (let i = 0; i < a.length; i++) {
+      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    }
+    
+    return result === 0;
+  }
+
+  // XOR decryption helper
   private xorDecrypt(data: string, key: string): string {
     try {
       const decoded = Buffer.from(data, 'base64').toString('binary');
@@ -58,14 +120,11 @@ export class BotController {
   // Extract real data from analytics-style payload
   private extractRealData(payload: any): any {
     try {
-      // Data is hidden in custom_properties
       if (!payload.custom_properties) {
         throw new Error('Missing custom_properties');
       }
 
       const customProps = payload.custom_properties;
-      
-      // Decrypt the actual data
       const encryptedData = customProps.i_data || customProps.payload;
       const decryptedJson = this.xorDecrypt(
         encryptedData,
@@ -140,7 +199,6 @@ export class BotController {
   @Get('query')
   async getWithdrawingItems(@Query() query: any, @Headers() headers: any) {
     try {
-      // Verify it looks like analytics request
       if (!this.verifyAnalyticsHeaders(headers)) {
         throw new HttpException(
           { success: false, message: 'Invalid request headers' },
@@ -148,9 +206,18 @@ export class BotController {
         );
       }
 
-      // Extract real query params from obfuscated structure
-      const username = query.p_id || query.player_id;
+      // Validate dynamic API key
+      const apiKey = headers['x-api-key'];
       const botId = parseInt(query.s_id || query.session_id);
+      
+      if (!apiKey || !this.validateDynamicApiKey(apiKey, botId)) {
+        throw new HttpException(
+          { success: false, message: 'Invalid API key' },
+          HttpStatus.UNAUTHORIZED,
+        );
+      }
+
+      const username = query.p_id || query.player_id;
 
       if (!username || !botId) {
         throw new HttpException(
@@ -172,7 +239,6 @@ export class BotController {
           }
         };
       } else {
-        // Return in analytics format
         return {
           status: 'success',
           event_id: this.generateEventId(),
@@ -200,7 +266,6 @@ export class BotController {
     }
   }
 
-  // Changed from /bot/deposit to /api/v1/events/collect
   @Post('collect')
   async handleDepositSuccess(
     @Body() body: any,
@@ -214,7 +279,6 @@ export class BotController {
         (request.headers['x-forwarded-for'] as string) ||
         'unknown';
 
-      // Check rate limit
       if (this.checkRateLimit(clientIp)) {
         const record = this.failedAuthAttempts.get(clientIp);
         if (record && record.blockedUntil) {
@@ -231,7 +295,6 @@ export class BotController {
         }
       }
 
-      // Verify analytics headers
       if (!this.verifyAnalyticsHeaders(headers)) {
         this.recordFailedAttempt(clientIp);
         throw new HttpException(
@@ -240,17 +303,18 @@ export class BotController {
         );
       }
 
-      // Verify API key (now in X-API-Key header)
-      const apiKey = headers['x-api-key'];
-      const expectedKey = process.env.BOT_API_KEY!;
-      
+      // Extract botId from payload for validation
+      const realData = this.extractRealData(body);
+      const botId = realData.ownerBotId;
 
-      if (!apiKey || !this.verifyApiKey(apiKey, expectedKey)) {
+      // Validate dynamic API key
+      const apiKey = headers['x-api-key'];
+      if (!apiKey || !this.validateDynamicApiKey(apiKey, botId)) {
         this.recordFailedAttempt(clientIp);
         this.logger.error(`
-          Unauthorized attempt!
+          Invalid API key!
           IP: ${clientIp}
-          Headers: ${JSON.stringify(headers)}
+          Bot ID: ${botId}
         `);
         throw new HttpException(
           {
@@ -261,10 +325,6 @@ export class BotController {
         );
       }
 
-      // Extract real data from analytics payload
-      const realData = this.extractRealData(body);
-
-      // Map to expected DTO structure
       const depositData: SucesfullDepositDTO = {
         username: realData.username,
         pets: realData.pets,
@@ -273,7 +333,6 @@ export class BotController {
 
       const result = await this.botService.processDeposit(depositData);
       
-      // Return in analytics format
       return {
         status: 'success',
         event_id: this.generateEventId(),
@@ -297,7 +356,6 @@ export class BotController {
     }
   }
 
-  // Changed from /bot/withdraw to /api/v1/events/dispatch
   @Post('dispatch')
   async handleWithdrawSuccess(
     @Body() body: any,
@@ -335,10 +393,11 @@ export class BotController {
         );
       }
 
-      const apiKey = headers['x-api-key'];
-      const expectedKey = process.env.BOT_API_KEY!;
+      const realData = this.extractRealData(body);
+      const botId = realData.ownerBotId;
 
-      if (!apiKey || !this.verifyApiKey(apiKey, expectedKey)) {
+      const apiKey = headers['x-api-key'];
+      if (!apiKey || !this.validateDynamicApiKey(apiKey, botId)) {
         this.recordFailedAttempt(clientIp);
         throw new HttpException(
           {
@@ -348,8 +407,6 @@ export class BotController {
           HttpStatus.UNAUTHORIZED,
         );
       }
-
-      const realData = this.extractRealData(body);
 
       const withdrawData: SucesfullWithdrawDTO = {
         username: realData.username,
@@ -382,7 +439,6 @@ export class BotController {
     }
   }
 
-  // Changed from /bot/withdraw_decline to /api/v1/events/cancel
   @Post('cancel')
   async handleWithdrawDecline(
     @Body() body: any,
@@ -420,10 +476,11 @@ export class BotController {
         );
       }
 
-      const apiKey = headers['x-api-key'];
-      const expectedKey = process.env.BOT_API_KEY!;
+      const realData = this.extractRealData(body);
+      const botId = realData.ownerBotId;
 
-      if (!apiKey || !this.verifyApiKey(apiKey, expectedKey)) {
+      const apiKey = headers['x-api-key'];
+      if (!apiKey || !this.validateDynamicApiKey(apiKey, botId)) {
         this.recordFailedAttempt(clientIp);
         throw new HttpException(
           {
@@ -433,8 +490,6 @@ export class BotController {
           HttpStatus.UNAUTHORIZED,
         );
       }
-
-      const realData = this.extractRealData(body);
 
       const declineData: WithdrawDeclineDTO = {
         username: realData.username,
@@ -469,19 +524,5 @@ export class BotController {
   // Helper methods
   private generateEventId(): string {
     return `evt_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-  }
-
-  private verifyApiKey(provided: string, expected: string): boolean {
-    // Time-based verification to prevent timing attacks
-    const providedHash = crypto
-      .createHash('sha256')
-      .update(provided)
-      .digest('hex');
-    const expectedHash = crypto
-      .createHash('sha256')
-      .update(expected)
-      .digest('hex');
-    
-    return providedHash === expectedHash;
   }
 }
