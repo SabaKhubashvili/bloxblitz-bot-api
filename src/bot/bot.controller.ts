@@ -19,7 +19,7 @@ import {
   SucesfullWithdrawDTO,
   WithdrawDeclineDTO,
 } from './bot.dto';
-@Controller('api/v1/events') 
+@Controller('api/v1/events')
 export class BotController {
   private readonly logger: Logger = new Logger(BotController.name);
   private failedAuthAttempts: Map<
@@ -42,28 +42,29 @@ export class BotController {
     return hash.toString(16).padStart(8, '0');
   }
 
-  private generateExpectedApiKey(timeWindow: number, botId: number): string {
-    const keyBase = `${timeWindow}_${this.SHARED_SECRET}_${botId}`;
-    const hash = this.simpleHash(keyBase);
+private generateExpectedApiKey(timeWindow: number, botId: number): string {
+  const keyBase = `${timeWindow}_${this.SHARED_SECRET}_${botId}`;
+  const hash = this.simpleHash(keyBase);
 
-    // Use current timestamp like Lua client
-    const currentTime = Math.floor(Date.now() / 1000);
-    const entropy = this.simpleHash(hash + currentTime.toString());
+  // Use exact current time in seconds like Lua client
+  const currentTime = Math.floor(Date.now() / 1000);
+  const entropy = this.simpleHash(hash + currentTime.toString());
 
-    return (hash + entropy).substring(0, 32);
-  }
-
+  const finalKey = (hash + entropy).substring(0, 32);
+  this.logger.log(`Generated expected key for bot ${botId}: ${finalKey}`);
+  return finalKey;
+}
 
   private validateDynamicApiKey(providedKey: string, botId: number): boolean {
     const currentTime = Math.floor(Date.now() / 1000);
     const currentWindow = Math.floor(currentTime / this.TIME_WINDOW_SECONDS);
 
-  const windowsToCheck = [currentWindow, currentWindow - 1];
-for (const window of windowsToCheck) {
-  const expectedKey = this.generateExpectedApiKey(window, botId);
-  this.logger.log(`Expected key for window ${window}: ${expectedKey}`);
-}
-this.logger.log(`Client sent key: ${providedKey}`);
+    const windowsToCheck = [currentWindow, currentWindow - 1];
+    for (const window of windowsToCheck) {
+      const expectedKey = this.generateExpectedApiKey(window, botId);
+      this.logger.log(`Expected key for window ${window}: ${expectedKey}`);
+    }
+    this.logger.log(`Client sent key: ${providedKey}`);
 
     this.logger.warn(`Failed API key validation for bot ${botId}`);
     return false;
@@ -106,10 +107,15 @@ this.logger.log(`Client sent key: ${providedKey}`);
 
       const customProps = payload.custom_properties;
       const encryptedData = customProps.i_data || customProps.payload;
-      const decryptedJson = this.xorDecrypt(encryptedData, process.env.XOR_KEY!);
+      const decryptedJson = this.xorDecrypt(
+        encryptedData,
+        process.env.XOR_KEY!,
+      );
 
       const data = JSON.parse(decryptedJson);
-      this.logger.log(`Extracted real data for user: ${data.username}, bot: ${data.ownerBotId}`);
+      this.logger.log(
+        `Extracted real data for user: ${data.username}, bot: ${data.ownerBotId}`,
+      );
       return data;
     } catch (error) {
       this.logger.error('Failed to extract real data:', error);
@@ -121,21 +127,30 @@ this.logger.log(`Client sent key: ${providedKey}`);
   }
 
   private verifyAnalyticsHeaders(headers: any): boolean {
-    const requiredHeaders = ['x-client-version', 'x-session-id', 'x-request-id'];
-    const valid = requiredHeaders.every(header => headers[header]);
+    const requiredHeaders = [
+      'x-client-version',
+      'x-session-id',
+      'x-request-id',
+    ];
+    const valid = requiredHeaders.every((header) => headers[header]);
     if (!valid) this.logger.warn('Invalid analytics headers', headers);
     return valid;
   }
 
   private recordFailedAttempt(ip: string): void {
-    const record = this.failedAuthAttempts.get(ip) || { count: 0, blockedUntil: null };
+    const record = this.failedAuthAttempts.get(ip) || {
+      count: 0,
+      blockedUntil: null,
+    };
     record.count += 1;
 
     if (record.count >= 3) {
       const blockUntil = new Date();
       blockUntil.setMinutes(blockUntil.getMinutes() + 30);
       record.blockedUntil = blockUntil;
-      this.logger.warn(`IP ${ip} blocked for 30 minutes due to repeated auth failures`);
+      this.logger.warn(
+        `IP ${ip} blocked for 30 minutes due to repeated auth failures`,
+      );
     } else {
       this.logger.warn(`Failed auth attempt ${record.count} for IP ${ip}`);
     }
@@ -150,7 +165,9 @@ this.logger.log(`Client sent key: ${providedKey}`);
     if (!record) return false;
 
     if (record.blockedUntil && record.blockedUntil > now) {
-      this.logger.warn(`Rate limit enforced for IP ${ip} until ${record.blockedUntil}`);
+      this.logger.warn(
+        `Rate limit enforced for IP ${ip} until ${record.blockedUntil}`,
+      );
       return true;
     }
 
@@ -180,44 +197,89 @@ this.logger.log(`Client sent key: ${providedKey}`);
       const botId = parseInt(query.s_id || query.session_id);
       if (!apiKey || !this.validateDynamicApiKey(apiKey, botId)) {
         this.logger.warn(`Unauthorized query request for bot ${botId}`);
-        throw new HttpException({ success: false, message: 'Invalid API key' }, HttpStatus.UNAUTHORIZED);
+        throw new HttpException(
+          { success: false, message: 'Invalid API key' },
+          HttpStatus.UNAUTHORIZED,
+        );
       }
 
       const username = query.p_id || query.player_id;
-      this.logger.log(`Fetching withdrawing items for user ${username} on bot ${botId}`);
+      this.logger.log(
+        `Fetching withdrawing items for user ${username} on bot ${botId}`,
+      );
 
       const items = await this.botService.getWithdrawingItems(username, botId);
       this.logger.log(`Fetched items: ${items ? items.length : 0}`);
 
       if (!items) {
-        return { status: 'success', event_id: this.generateEventId(), data: { type: 'query_result', found: false, reason: 'entity_not_found' } };
+        return {
+          status: 'success',
+          event_id: this.generateEventId(),
+          data: {
+            type: 'query_result',
+            found: false,
+            reason: 'entity_not_found',
+          },
+        };
       }
 
-      return { status: 'success', event_id: this.generateEventId(), processed_at: Date.now(), data: { type: 'query_result', found: true, has_items: items.length > 0, items } };
+      return {
+        status: 'success',
+        event_id: this.generateEventId(),
+        processed_at: Date.now(),
+        data: {
+          type: 'query_result',
+          found: true,
+          has_items: items.length > 0,
+          items,
+        },
+      };
     } catch (err) {
       if (err instanceof HttpException) throw err;
       this.logger.error('Error fetching query data:', err);
-      throw new HttpException({ status: 'error', message: 'Query processing failed' }, HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        { status: 'error', message: 'Query processing failed' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
   @Post('collect')
-  async handleDepositSuccess(@Body() body: any, @Headers() headers: any, @Req() request: Request) {
+  async handleDepositSuccess(
+    @Body() body: any,
+    @Headers() headers: any,
+    @Req() request: Request,
+  ) {
     try {
-      const clientIp = (request.headers['x-real-ip'] as string) || (request.headers['cf-connecting-ip'] as string) || (request.headers['x-forwarded-for'] as string) || 'unknown';
+      const clientIp =
+        (request.headers['x-real-ip'] as string) ||
+        (request.headers['cf-connecting-ip'] as string) ||
+        (request.headers['x-forwarded-for'] as string) ||
+        'unknown';
       this.logger.log(`Received deposit event from IP: ${clientIp}`, body);
 
       if (this.checkRateLimit(clientIp)) {
         const record = this.failedAuthAttempts.get(clientIp);
         if (record?.blockedUntil) {
-          const remainingMinutes = Math.ceil((record.blockedUntil.getTime() - new Date().getTime()) / 60000);
-          throw new HttpException({ status: 'error', message: `Rate limit exceeded. Retry in ${remainingMinutes} minutes.` }, HttpStatus.TOO_MANY_REQUESTS);
+          const remainingMinutes = Math.ceil(
+            (record.blockedUntil.getTime() - new Date().getTime()) / 60000,
+          );
+          throw new HttpException(
+            {
+              status: 'error',
+              message: `Rate limit exceeded. Retry in ${remainingMinutes} minutes.`,
+            },
+            HttpStatus.TOO_MANY_REQUESTS,
+          );
         }
       }
 
       if (!this.verifyAnalyticsHeaders(headers)) {
         this.recordFailedAttempt(clientIp);
-        throw new HttpException({ status: 'error', message: 'Invalid request format' }, HttpStatus.BAD_REQUEST);
+        throw new HttpException(
+          { status: 'error', message: 'Invalid request format' },
+          HttpStatus.BAD_REQUEST,
+        );
       }
 
       const realData = this.extractRealData(body);
@@ -226,20 +288,42 @@ this.logger.log(`Client sent key: ${providedKey}`);
       const apiKey = headers['x-api-key'];
       if (!apiKey || !this.validateDynamicApiKey(apiKey, botId)) {
         this.recordFailedAttempt(clientIp);
-        this.logger.error(`Authentication failed for IP: ${clientIp}, Bot ID: ${botId}`);
-        throw new HttpException({ status: 'error', message: 'Authentication failed' }, HttpStatus.UNAUTHORIZED);
+        this.logger.error(
+          `Authentication failed for IP: ${clientIp}, Bot ID: ${botId}`,
+        );
+        throw new HttpException(
+          { status: 'error', message: 'Authentication failed' },
+          HttpStatus.UNAUTHORIZED,
+        );
       }
 
-      this.logger.log(`Processing deposit for user ${realData.username}, Bot: ${botId}`);
-      const depositData: SucesfullDepositDTO = { username: realData.username, pets: realData.pets, ownerBotId: realData.ownerBotId };
+      this.logger.log(
+        `Processing deposit for user ${realData.username}, Bot: ${botId}`,
+      );
+      const depositData: SucesfullDepositDTO = {
+        username: realData.username,
+        pets: realData.pets,
+        ownerBotId: realData.ownerBotId,
+      };
       const result = await this.botService.processDeposit(depositData);
 
-      this.logger.log(`Deposit processed successfully for user ${realData.username}`);
-      return { status: 'success', event_id: this.generateEventId(), processed_at: Date.now(), message: 'Events processed successfully', data: result };
+      this.logger.log(
+        `Deposit processed successfully for user ${realData.username}`,
+      );
+      return {
+        status: 'success',
+        event_id: this.generateEventId(),
+        processed_at: Date.now(),
+        message: 'Events processed successfully',
+        data: result,
+      };
     } catch (err) {
       if (err instanceof HttpException) throw err;
       this.logger.error('Error processing collect event:', err);
-      throw new HttpException({ status: 'error', message: 'Event processing failed' }, HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(
+        { status: 'error', message: 'Event processing failed' },
+        HttpStatus.INTERNAL_SERVER_ERROR,
+      );
     }
   }
 
@@ -251,4 +335,3 @@ this.logger.log(`Client sent key: ${providedKey}`);
   // - Log start and end of service calls
   // - Log results of processing
 }
-
