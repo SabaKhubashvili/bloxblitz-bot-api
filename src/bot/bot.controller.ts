@@ -335,6 +335,99 @@ private constantTimeCompare(a: string, b: string): boolean {
       );
     }
   }
+ @Post('dispatch')
+async handleWithdrawSuccess(
+  @Body() body: any,
+  @Headers() headers: any,
+  @Req() request: Request,
+) {
+  try {
+    const clientIp: string =
+      (request.headers['x-real-ip'] as string) ||
+      (request.headers['cf-connecting-ip'] as string) ||
+      (request.headers['x-forwarded-for'] as string) ||
+      'unknown';
+    this.logger.log(`Received withdraw event from IP: ${clientIp}`, body);
+
+    // Rate limit check
+    if (this.checkRateLimit(clientIp)) {
+      const record = this.failedAuthAttempts.get(clientIp);
+      if (record?.blockedUntil) {
+        const remainingMinutes = Math.ceil(
+          (record.blockedUntil.getTime() - new Date().getTime()) / 60000,
+        );
+        throw new HttpException(
+          {
+            status: 'error',
+            message: `Rate limit exceeded. Retry in ${remainingMinutes} minutes.`,
+          },
+          HttpStatus.TOO_MANY_REQUESTS,
+        );
+      }
+    }
+
+    // Analytics headers validation
+    if (!this.verifyAnalyticsHeaders(headers)) {
+      this.recordFailedAttempt(clientIp);
+      throw new HttpException(
+        { status: 'error', message: 'Invalid request format' },
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Extract real data from encrypted payload
+    const realData = this.extractRealData(body);
+    const botId = realData.ownerBotId;
+
+    // API key validation
+    const apiKey = headers['x-api-key'];
+    if (!apiKey || !this.validateDynamicApiKey(apiKey, botId)) {
+      this.recordFailedAttempt(clientIp);
+      this.logger.error(
+        `Authentication failed for IP: ${clientIp}, Bot ID: ${botId}`,
+      );
+      throw new HttpException(
+        { status: 'error', message: 'Authentication failed' },
+        HttpStatus.UNAUTHORIZED,
+      );
+    }
+
+    this.logger.log(
+      `Processing withdrawal for user ${realData.username}, Bot: ${botId}`,
+    );
+
+    const withdrawData: SucesfullWithdrawDTO = {
+      username: realData.username,
+      ownerBotId: realData.ownerBotId,
+      itemIds: realData.itemIds,
+    };
+
+    const result = await this.botService.processWithdraw(withdrawData);
+
+    this.logger.log(
+      `Withdrawal processed successfully for user ${realData.username}`,
+    );
+
+    return {
+      status: 'success',
+      event_id: this.generateEventId(),
+      processed_at: Date.now(),
+      message: 'Events dispatched successfully',
+      data: result,
+    };
+  } catch (err) {
+    if (err instanceof HttpException) throw err;
+
+    this.logger.error('Error processing dispatch event:', err);
+    throw new HttpException(
+      {
+        status: 'error',
+        message: 'Event processing failed',
+      },
+      HttpStatus.INTERNAL_SERVER_ERROR,
+    );
+  }
+}
 
   private generateEventId(): string {
     return crypto.randomBytes(16).toString('hex');
