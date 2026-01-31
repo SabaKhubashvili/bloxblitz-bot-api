@@ -75,10 +75,7 @@ private generateExpectedApiKey(botId: number): string {
 }
 
 private normalizeKey(key: string): string {
-  // Lua client pads to 32 chars, we just take the first 32
-  // If key is shorter than 32, pad with zeros to match Lua behavior
-  if (key.length >= 32) return key.slice(0, 32);
-  return key.padEnd(32, '0');
+  return key.padEnd(14, '0');
 }
 
 private constantTimeCompare(a: string, b: string): boolean {
