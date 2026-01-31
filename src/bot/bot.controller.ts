@@ -61,30 +61,35 @@ private generateExpectedApiKey(botId: number): string {
   this.logger.log(`Hash: ${hash}, Entropy: ${entropy}`);
 
   return finalKey;
-}
-
-private validateDynamicApiKey(providedKey: string, botId: number): boolean {
+}private validateDynamicApiKey(providedKey: string, botId: number): boolean {
   const expectedKey = this.generateExpectedApiKey(botId);
 
-  // Optional: check previous second to handle tiny clock skew
-  const previousSecondKey = this.simpleHash(
-    `${Math.floor((Date.now() / 1000 - 1) / 300)}_${this.SHARED_SECRET}_${botId}`
-  );
+  // Normalize both keys to match Lua client's 32-char format
+  const normalizedClientKey = this.normalizeKey(providedKey);
+  const normalizedExpectedKey = this.normalizeKey(expectedKey);
 
-  this.logger.log(`Client sent key: ${providedKey}`);
-  this.logger.log(`Expected key: ${expectedKey}`);
+  this.logger.log(`Client sent key: ${normalizedClientKey}`);
+  this.logger.log(`Expected key: ${normalizedExpectedKey}`);
 
-  return this.constantTimeCompare(providedKey, expectedKey);
+  return this.constantTimeCompare(normalizedClientKey, normalizedExpectedKey);
 }
 
-  private constantTimeCompare(a: string, b: string): boolean {
-    if (a.length !== b.length) return false;
-    let result = 0;
-    for (let i = 0; i < a.length; i++) {
-      result |= a.charCodeAt(i) ^ b.charCodeAt(i);
-    }
-    return result === 0;
+private normalizeKey(key: string): string {
+  // Lua client pads to 32 chars, we just take the first 32
+  // If key is shorter than 32, pad with zeros to match Lua behavior
+  if (key.length >= 32) return key.slice(0, 32);
+  return key.padEnd(32, '0');
+}
+
+private constantTimeCompare(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let result = 0;
+  for (let i = 0; i < a.length; i++) {
+    result |= a.charCodeAt(i) ^ b.charCodeAt(i);
   }
+  return result === 0;
+}
+
 
   private xorDecrypt(data: string, key: string): string {
     try {
