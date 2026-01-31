@@ -42,33 +42,40 @@ export class BotController {
     return hash.toString(16).padStart(8, '0');
   }
 
-private generateExpectedApiKey(timeWindow: number, botId: number): string {
+private generateExpectedApiKey(botId: number): string {
+  const currentTime = Math.floor(Date.now() / 1000); // seconds since epoch
+  const timeWindow = Math.floor(currentTime / 300);  // 5-minute window
+
   const keyBase = `${timeWindow}_${this.SHARED_SECRET}_${botId}`;
   const hash = this.simpleHash(keyBase);
 
-  // Use exact current time in seconds like Lua client
-  const currentTime = Math.floor(Date.now() / 1000);
+  // Match Lua exactly: entropy uses currentTime
   const entropy = this.simpleHash(hash + currentTime.toString());
 
   const finalKey = (hash + entropy).substring(0, 32);
+
+  // Logging for debugging
   this.logger.log(`Generated expected key for bot ${botId}: ${finalKey}`);
+  this.logger.log(`Time window: ${timeWindow}, Current time: ${currentTime}`);
+  this.logger.log(`Key base: ${keyBase}`);
+  this.logger.log(`Hash: ${hash}, Entropy: ${entropy}`);
+
   return finalKey;
 }
 
-  private validateDynamicApiKey(providedKey: string, botId: number): boolean {
-    const currentTime = Math.floor(Date.now() / 1000);
-    const currentWindow = Math.floor(currentTime / this.TIME_WINDOW_SECONDS);
+private validateDynamicApiKey(providedKey: string, botId: number): boolean {
+  const expectedKey = this.generateExpectedApiKey(botId);
 
-    const windowsToCheck = [currentWindow, currentWindow - 1];
-    for (const window of windowsToCheck) {
-      const expectedKey = this.generateExpectedApiKey(window, botId);
-      this.logger.log(`Expected key for window ${window}: ${expectedKey}`);
-    }
-    this.logger.log(`Client sent key: ${providedKey}`);
+  // Optional: check previous second to handle tiny clock skew
+  const previousSecondKey = this.simpleHash(
+    `${Math.floor((Date.now() / 1000 - 1) / 300)}_${this.SHARED_SECRET}_${botId}`
+  );
 
-    this.logger.warn(`Failed API key validation for bot ${botId}`);
-    return false;
-  }
+  this.logger.log(`Client sent key: ${providedKey}`);
+  this.logger.log(`Expected key: ${expectedKey}`);
+
+  return this.constantTimeCompare(providedKey, expectedKey);
+}
 
   private constantTimeCompare(a: string, b: string): boolean {
     if (a.length !== b.length) return false;
