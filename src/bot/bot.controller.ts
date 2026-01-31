@@ -75,7 +75,7 @@ private generateExpectedApiKey(botId: number): string {
 }
 
 private normalizeKey(key: string): string {
-  return key.padEnd(14, '0');
+  return key.slice(0,13);
 }
 
 private constantTimeCompare(a: string, b: string): boolean {
